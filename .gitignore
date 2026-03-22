@@ -1,0 +1,18 @@
+# IDE and Build folders
+Debug/
+Release/
+.metadata/
+.settings/
+
+# Compiled Object files
+*.o
+*.elf
+*.bin
+*.hex
+*.map
+*.su
+*.list
+
+# OS generated files
+.DS_Store
+Thumbs.db
