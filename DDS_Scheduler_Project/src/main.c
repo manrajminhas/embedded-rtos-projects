@@ -43,7 +43,7 @@ TimerHandle_t xTimerUser3;
 
 /*---------------------------- TEST BENCHES ---------------------------- */
 // Change this to TB_2 or TB_3 to test the other scenarios
-#define TB_2
+#define TB_1
 
 #ifdef TB_1
     #define T1_EXEC   pdMS_TO_TICKS(95)
@@ -212,9 +212,11 @@ void myDDSInit(void) {
 /*---------------------------- List Helper Functions ---------------------------- */
 
 void insert_node(dd_task_list **head, dd_task new_task){
-    // Using pvPortMalloc for heap_4.c compatibility
+
+	//If memory is avaiable, create a new node
     dd_task_list *new_node = (dd_task_list *)pvPortMalloc(sizeof(dd_task_list));
 
+    //If the node is unsuccessfully enabled, ie not enough memory, send a warning
     if (new_node == NULL) {
         printf("Memory allocation failed\n");
         return;
@@ -224,6 +226,7 @@ void insert_node(dd_task_list **head, dd_task new_task){
     new_node->next_task = NULL;
 
     // Case 1: Empty list OR new task has the earliest deadline (new head)
+    // If the head is empty, or the new deadline is less than the current head deadline
     if (*head == NULL || (*head)->task.absolute_deadline > new_task.absolute_deadline) {
         new_node->next_task = *head;
         *head = new_node;
@@ -231,6 +234,7 @@ void insert_node(dd_task_list **head, dd_task new_task){
     }
 
     // Case 2: Insert in the middle or at the tail
+    // Search each node within the stack to find where it should sit based on deadline
     dd_task_list *current = *head;
     while (current->next_task != NULL &&
            current->next_task->task.absolute_deadline <= new_task.absolute_deadline) {
@@ -283,7 +287,7 @@ uint32_t get_list_size(dd_task_list *head){
 
 /*---------------------------- DDS State Machine Functions ---------------------------- */
 
-/* adjust_priorities() — set head of Active List to HIGH, others to LOW; recalculate timeout */
+//adjust_priorities() — set head of Active List to MED, others to LOW; recalculate timeout
 void adjust_priorities(void) {
     if (active_list == NULL) {
         current_timeout = portMAX_DELAY; // Nothing to do, wait forever
@@ -293,7 +297,7 @@ void adjust_priorities(void) {
     // 1. Set the head task to MED priority AND wake it up!
     if (active_list->task.t_handle != NULL) {
         vTaskPrioritySet(active_list->task.t_handle, PRIORITY_MED);
-        vTaskResume(active_list->task.t_handle); // <--- ADD THIS EXACT LINE
+        vTaskResume(active_list->task.t_handle);
     }
 
     // 2. Demote all other active tasks to LOW priority
@@ -314,14 +318,14 @@ void adjust_priorities(void) {
     }
 }
 
-/* handle_release() — assign release time, insert into Active List, adjust priorities */
+// handle_release() — assign release time, insert into Active List, adjust priorities
 void handle_release(dd_task new_task) {
     new_task.release_time = xTaskGetTickCount();
     insert_node(&active_list, new_task);
     adjust_priorities();
 }
 
-/* handle_complete() — assign completion time, move from Active to Completed, adjust priorities */
+// handle_complete() — assign completion time, move from Active to Completed, adjust priorities
 void handle_complete(uint32_t task_id) {
     dd_task_list *completed_node = remove_node(&active_list, task_id);
 
@@ -335,7 +339,7 @@ void handle_complete(uint32_t task_id) {
     adjust_priorities();
 }
 
-/* handle_deadline_miss() — move head of Active to Overdue, signal Generator */
+// handle_deadline_miss() — move head of Active to Overdue, signal Generator
 void handle_deadline_miss(void) {
     if (active_list == NULL) return;
 
@@ -355,7 +359,6 @@ void handle_deadline_miss(void) {
     // Output for testing/checkpoint
     printf("\n>>> DEADLINE MISSED for Task ID: %u <<<\n", missed_node->task.task_id);
 
-    // FIX: Signal the Generator to re-release the task via the Queue
     uint32_t missed_id = missed_node->task.task_id;
     xQueueSend(xGeneratorQueue, &missed_id, portMAX_DELAY);
 
@@ -423,7 +426,7 @@ dd_task_list* get_overdue_dd_task_list(void) {
 
 /*---------------------------- Tasks ---------------------------- */
 
-/* DD_Scheduler task — main loop: receive message -> handle it -> block again */
+//DD_Scheduler task — main loop: receive message -> handle it -> block again
 void DD_Scheduler(void *pvParameters) {
     dd_message message_received;
     uint32_t reply_status = YES;
